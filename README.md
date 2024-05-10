@@ -38,7 +38,7 @@ cd ~
 mkdir ddt2_hw
 cd ddt2_hw
 git clone git@github.com:L-SY/ddt2_hw.git ~/ddt2_hw/src
-colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -G Ninja
+colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
 ```
 
 ##### 相关依赖

@@ -23,7 +23,8 @@ namespace ddt2_position_controller {
             : controller_interface::ControllerInterface(),
               rt_command_ptr_(nullptr),
               joints_command_subscriber_(nullptr),
-              velocity_limits_subscriber_(nullptr) {}
+              velocity_limits_subscriber_(nullptr),
+              velocity_limits_position_subscriber_(nullptr){}
 
     controller_interface::return_type
     DDT2PositionController::init(const std::string &controller_name) {
@@ -83,6 +84,17 @@ namespace ddt2_position_controller {
                 [this](const CmdType::SharedPtr msg) {
                     setLimitVelocity(msg);
                 });
+
+        velocity_limits_position_subscriber_ = get_node()->create_subscription<CmdType>(
+                "~/velocity_limits_position", rclcpp::SystemDefaultsQoS(),
+                [this](const CmdType::SharedPtr msg) {
+                    double position_msg=msg->data[1];
+                    setLimitVelocity_position(msg);
+                    msg->data.resize(1);
+                    msg->data[0]=position_msg;
+                    rt_command_ptr_.writeFromNonRT(msg);
+                });
+
         RCLCPP_INFO(get_node()->get_logger(), "configure successful");
         return CallbackReturn::SUCCESS;
     }
@@ -232,7 +244,28 @@ namespace ddt2_position_controller {
         limit_velocity_.can_dlc = 8;
         socket_can_.write(&limit_velocity_);
     }
+    void DDT2PositionController::setLimitVelocity_position(const CmdType::SharedPtr msg) {
+        can_frame limit_velocity_{};
+        double velocity_limit = msg->data[0];
+        const CmdType::SharedPtr position_msg;
+        int velocity_limit_int = static_cast<int>(velocity_limit);
+        unsigned char hex_value = static_cast<unsigned char>(velocity_limit_int & 0xFF);
+        limit_velocity_.data[0] = 0x01;
+        limit_velocity_.data[1] = 0x4D;
+        limit_velocity_.data[2] = hex_value;
+        limit_velocity_.data[3] = 0x00;
+        limit_velocity_.data[4] = 0x00;
+        limit_velocity_.data[5] = 0x00;
+        limit_velocity_.data[6] = 0xFF;
+        limit_velocity_.data[7] = 0xFF;
+        limit_velocity_.can_id = 0x036;
+        limit_velocity_.can_dlc = 8;
+        socket_can_.write(&limit_velocity_);
+        std::cout << "finish set limit" << msg->data[0]<<std::endl;
+    }
 } // namespace ddt2_position_controller
+
+
 
 #include "pluginlib/class_list_macros.hpp"
 

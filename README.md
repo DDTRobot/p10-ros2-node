@@ -18,36 +18,84 @@
 | ros2_control | foxy  |
 
 #### 项目介绍
-
 - 利用ros2_control框架https://github.com/ros-controls/ros2_control/tree/foxy 实现硬件抽象层HAL。
 - 利用Linux socketcan实现can信号的收发
 
-#### 安装
+#### 配置环境 
+- 用户可以使用提前准备好的镜像，直接sd卡烧录即可，不需要额外准备horizonX3pi的ros2 环境
+- 对于x3pi用户也可以手动配置环境
 
-##### ros2_control
 
+##### 通过镜像自动配置
+即可跳过配置环境的步骤
+
+
+
+##### 手动配置环境
+
+
+##### 安装编译相关工具
+```
+sudo apt update 
+sudo apt upgrade
+sudo apt install -y \
+  build-essential \
+  cmake \
+  git \
+  python3-colcon-common-extensions \
+  python3-pip \
+  python3-vcstool \
+  wget
+```
+
+###### 安装ros2_control
 ```
 sudo apt-get install ros-foxy-ros2-control
-sudo apt-get install ros-foxy-ros2-controller
-```
-
-##### 源码
-
-```
-cd ~
-mkdir ddt2_hw
-cd ddt2_hw
-git clone git@github.com:L-SY/ddt2_hw.git ~/ddt2_hw/src
-colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
+sudo apt-get install ros-foxy-ros2-controllers
 ```
 
 ##### 相关依赖
 
 ```
+sudo apt-get install ros-foxy-ament-cmake 
+sudo apt install -y ros-foxy-control-toolbox
 sudo apt-get install ros-foxy-yaml-cpp-vendor
+sudo apt-get install xacro
+```
+##### 选择一个文件夹安装yaml-cpp工具包
+```
+mkdir yaml-cpp-share
+git clone https://github.com/jbeder/yaml-cpp.git 
+cd yaml-cpp && mkdir build && cd build
+cmake -DYAML_BUILD_SHARED_LIBS=on ../yaml-cpp
+sudo make
+sudo make install
+sudo ldconfig
+```
+
+##### 安装socketcan工具
+```
+sudo apt-get install can-utils
+```
+
+
+##### 依赖可视化工具
+```
 sudo apt-get install ros-foxy-plotjuggler*
 sudo apt-get install ros-foxy-rqt*
 ```
+
+
+##### 下载源码
+
+```
+cd ~
+mkdir ddt2_hw
+cd ddt2_hw
+git clone -b horizonX3 https://github.com/DDTRobot/p10-ros2-node.git
+colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 
+```
+
 
 #### 源码介绍
 
@@ -63,6 +111,15 @@ sudo apt-get install ros-foxy-rqt*
 
 #### 使用
 
+##### 更改文件路径
+- launch文件中：xacro的路径
+![launch_path](launch.png)
+- description文件中:配置文件yaml的路径
+![description](description.png)
+
+
+
+
 ##### 初始化MKS CANable V2.0的设置
 
 ```
@@ -71,10 +128,12 @@ sudo slcand -o -c -s8 /dev/ttyACMx can0       注意波特率要1M适配电机�
 sudo ifconfig can0 up
 ```
 
+
 ##### 开启控制器
 
-```c
+```
 source ~ddt2_ws/install/local_setup.bash
+//注意：程序启动后，默认先控制电机回原点
 ros2 launch ddt2_assets load_hw.launch.py
 ```
 
@@ -83,6 +142,7 @@ ros2 launch ddt2_assets load_hw.launch.py
 ```
 /actuator_states
 /ddt2_controller/commands
+/ddt2_position_controller/velocity_limits_position
 /dynamic_joint_states
 /gains/joint1/pid_state
 /joint_states
@@ -93,6 +153,38 @@ ros2 launch ddt2_assets load_hw.launch.py
 /tf_static
 ```
 
+##### 提供bash脚本为开机自启动
+```
+#!/bin/bash
+while true; do
+    if ls /dev |grep -q "ttyACM0"; then 
+        echo "USB-CAN device detectd, starting progame"
+        break
+    else 
+        echo "waiting USB-CAN"
+        sleep 1
+    fi
+done
+
+#地平线X3pi需要，其他平台不一定
+sudo setcap -r /usr/lib/python3.8
+#根据计算机环境决定是否设置环境变量（.bashrc中）
+export PATH=/opt/ros/foxy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+
+source /opt/ros/foxy/setup.bash 
+//根据计算机路径需改变
+source /home/ddt/p10-ros2-node-ros2_control/install/local_setup.bash
+
+sleep 1
+sudo slcand -o -c -s8 /dev/ttyACM0 can0
+sleep 1
+sudo ifconfig can0 up
+sleep 1
+ros2 launch ddt2_assets load_hw.launch.py
+
+```
+
+
 ##### 控制电机
 
 往`/ddt2_controller/commands`上发命令则可以控制(单位为圈，相对于位置零点），例如：
@@ -101,10 +193,10 @@ ros2 launch ddt2_assets load_hw.launch.py
 ros2 topic pub /ddt2_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [1.5]}"
 ```
 
-如果需要以指定速度到达指定位置的效果，则需在发上述控制命令前发送最大速度限制（单位为RPM，最大值为100），例如：
+如果需要以指定速度到达指定位置的效果：data[0]:规划速度，data[1]：最终输出轴位置
 
 ```
-ros2 topic pub /ddt2_position_controller/velocity_limits std_msgs/msg/Float64MultiArray "{data: [3]}"
+ros2 topic pub /ddt2_position_controller/velocity_limits_position std_msgs/msg/Float64MultiArray "{data: [50,0.15]}"
 ```
 
 ##### 电机信息可视化

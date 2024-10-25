@@ -1,5 +1,7 @@
 ## DDT2_HW
 
+Language：[English](README_EN.md) / [简体中文](README.md)
+
 #### 相关配置
 
 ##### 硬件
